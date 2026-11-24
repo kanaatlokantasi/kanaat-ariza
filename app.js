@@ -79,6 +79,7 @@ async function shrink(file) {
 function page(html) {
   const f = flash; flash = "";
   $("#app").innerHTML = (f ? `<div class="note">${esc(f)}</div>` : "") + html;
+  if (qrShow && $("#qrc")) drawQR(qrShow);
   $("#nav").innerHTML = isApproved() ? nav() : "";
   $("#who").textContent = isApproved() ? `${myName()} · ${ROLES[me.role] || ""}` : "";
 }
@@ -297,8 +298,8 @@ function adminPage() {
       <label class="muted" style="display:flex;gap:8px;align-items:center;margin-top:10px"><input name="priority" type="checkbox" style="width:auto"> Öncelikli (QR/etiket takılacak)</label>
       <button class="btn big" style="margin-top:12px">Ekle</button><p class="err"></p>
     </form>
+    <div id="qrbox">${qrShow ? qrCardHtml(qrShow) : ""}</div>
     <h3>Ekipmanlar</h3>${eqRows}
-    <div id="qrbox"></div>
     <h3>Kategoriler (eksik ürün bildiriminde üst grup)</h3>
     <form id="kf" class="card">
       <label>Yeni kategori<input name="ad" placeholder="Örn. Kuru baklagil" required></label>
@@ -314,13 +315,40 @@ function adminPage() {
     ${prodRows}`;
 }
 
-function showQR(id) {
+let qrShow = null;
+
+function qrCardHtml(id) {
+  const e = D.equipment.find(x => x.id === id);
+  const name = e?.name || "Ekipman";
   const url = location.href.split("#")[0] + "#ekipman/" + id;
-  const box = $("#qrbox");
-  if (!box) return;
-  box.innerHTML = `<div class="card"><div id="qrc"></div><p class="mono">${esc(url)}</p>
-    <p class="muted">Bu adresi QR olarak metal plakaya basıp makineye takın.</p></div>`;
-  if (window.QRCode) new QRCode(document.getElementById("qrc"), { text: url, width: 200, height: 200 });
+  return `<div class="card"><b>${esc(name)}</b>
+    <div id="qrc" style="margin:12px 0;text-align:center"></div>
+    <p class="mono">${esc(url)}</p>
+    <p class="muted">Bu QR kodu metal plakaya basıp makineye takın.</p>
+    <div class="row">
+      <button class="btn" data-act="qrshare" data-url="${esc(url)}" data-name="${esc(name)}">Paylaş</button>
+      <button class="btn ghost" data-act="qrdl" data-name="${esc(name)}">QR'ı indir</button>
+      <button class="btn ghost" data-act="qrclose">Kapat</button>
+    </div></div>`;
+}
+
+function drawQR(id) {
+  const el = $("#qrc");
+  if (!el) return;
+  el.innerHTML = "";
+  const url = location.href.split("#")[0] + "#ekipman/" + id;
+  if (window.QRCode) new QRCode(el, { text: url, width: 220, height: 220 });
+}
+
+function showQR(id) {
+  qrShow = id;
+  route();
+  $("#qrbox")?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function qrPng() {
+  const c = document.querySelector("#qrc canvas");
+  return c ? c.toDataURL("image/png") : null;
 }
 
 // ---------- Kimlik ve veri ----------
@@ -383,13 +411,13 @@ async function submitMaint(f) {
 
 async function submitEquip(f) {
   const d = Object.fromEntries(new FormData(f));
-  await addDoc(collection(db, "equipment"), {
+  const ref = await addDoc(collection(db, "equipment"), {
     name: d.name.trim(), model: (d.model || "").trim(), location: d.location,
     service: (d.service || "").trim(), servicePhone: (d.servicePhone || "").trim(),
     warranty: d.warranty || null, priority: !!d.priority, createdAt: iso()
   });
-  flash = "Ekipman eklendi.";
-  route();
+  flash = "Ekipman eklendi. QR kodu aşağıda.";
+  showQR(ref.id);
 }
 
 async function submitCat(f) {
@@ -443,6 +471,29 @@ document.addEventListener("click", async ev => {
     if (act === "logout") return signOut(auth);
     if (act === "notif") return enablePush(false);
     if (act === "qr") return showQR(id);
+    if (act === "qrclose") { qrShow = null; return route(); }
+    if (act === "qrdl") {
+      const png = qrPng();
+      if (png) { const a = document.createElement("a"); a.href = png; a.download = `QR-${b.dataset.name}.png`; a.click(); }
+      return;
+    }
+    if (act === "qrshare") {
+      const png = qrPng();
+      const url = b.dataset.url, name = b.dataset.name;
+      try {
+        if (png && navigator.share) {
+          const blob = await (await fetch(png)).blob();
+          const file = new File([blob], `QR-${name}.png`, { type: "image/png" });
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            return await navigator.share({ title: name, text: `${name} QR kodu`, files: [file] });
+          }
+        }
+        if (navigator.share) return await navigator.share({ title: name, url });
+        await navigator.clipboard.writeText(url);
+        flash = "Bağlantı kopyalandı."; route();
+      } catch (e) { if (e?.name !== "AbortError") { flash = errMsg(e); route(); } }
+      return;
+    }
     if (act === "approve") await updateDoc(doc(db, "users", id), { approved: true, decidedAt: iso() });
     if (act === "revoke" && confirm("Bu kişinin erişimi kapatılsın mı?")) await updateDoc(doc(db, "users", id), { approved: false, decidedAt: iso() });
     if (act === "delprod" && confirm("Ürün listeden silinsin mi?")) await deleteDoc(doc(db, "products", id));
