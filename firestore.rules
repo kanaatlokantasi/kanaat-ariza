@@ -1,0 +1,66 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+    function me() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    function approved() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && me().approved == true;
+    }
+    function isAdmin() {
+      return approved() && me().role == 'admin';
+    }
+    function isTech() {
+      return approved() && (me().role == 'admin' || me().role == 'teknik');
+    }
+
+    // Kullanıcılar: herkes kendi kaydını okur, kendi FCM anahtarını günceller.
+    // Yönetici tüm kullanıcıları okur ve onay, rol değiştirir.
+    match /users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow create: if signedIn()
+        && request.auth.uid == uid
+        && request.resource.data.approved == false
+        && request.resource.data.role == 'staff';
+      allow update: if isAdmin()
+        || (signedIn() && request.auth.uid == uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['fcmTokens']));
+      allow delete: if isAdmin();
+    }
+
+    match /equipment/{id} {
+      allow read: if approved();
+      allow write: if isAdmin();
+    }
+
+    match /products/{id} {
+      allow read: if approved();
+      allow write: if isAdmin();
+    }
+
+    match /faults/{id} {
+      allow read: if approved();
+      allow create: if approved() && request.resource.data.status == 'acik';
+      allow update: if isTech();
+      allow delete: if isAdmin();
+    }
+
+    match /shortages/{id} {
+      allow read: if approved();
+      allow create: if approved() && request.resource.data.status == 'acik';
+      allow update, delete: if isAdmin();
+    }
+
+    match /maintenance/{id} {
+      allow read: if approved();
+      allow create: if approved();
+      allow delete: if isAdmin();
+    }
+  }
+}

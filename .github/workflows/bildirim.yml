@@ -1,0 +1,26 @@
+name: Bildirimler
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"   # yeni talep, arıza ve eksik ürün kontrolü
+    - cron: "0 10 * * *"     # 13:00 İstanbul günlük hatırlatma
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Bağımlılıkları kur
+        run: npm install --no-save --no-package-lock firebase-admin@12
+      - name: Bildirimleri gönder
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          SCHEDULE: ${{ github.event.schedule }}
+        run: node scripts/notify.mjs
