@@ -151,7 +151,7 @@ function shortItem(s) {
   const sel = isAdmin() ? `<select data-sst="${esc(s.id)}" style="margin-top:6px">${stOpts(["acik", "siparis", "kapandi"], s.status)}</select>` : "";
   return `<div class="item"><b>${esc(s.urun)}</b><span class="pill ${s.durum === "Bitti" ? "p-acil" : ""}">${esc(s.durum)}</span>
     <span class="muted">${esc(s.konum)} · ${esc(s.name)} · ${fmt(s.createdAt)} · ${ST[s.status] || ""}</span>
-    ${s.note ? `<p>${esc(s.note)}</p>` : ""}${sel}</div>`;
+    ${s.note ? `<p>${esc(s.note)}</p>` : ""}${s.photo ? `<img class="ph" src="${s.photo}" alt="">` : ""}${sel}</div>`;
 }
 
 function home() {
@@ -189,6 +189,7 @@ function shortPage() {
         <label>Durum<select name="durum">${opts(DURUM)}</select></label>
         <label>Konum<select name="konum">${opts(SHORT_LOC)}</select></label>
         <label>Not<textarea name="note" rows="2" placeholder="Örn. 2 kasa kaldı"></textarea></label>
+        <label>Fotoğraf (isteğe bağlı)<input name="photo" type="file" accept="image/*"></label>
         <button class="btn dark big" style="margin-top:14px">Bildir</button><p class="err"></p>
       </form>`
     : `<div class="warn">Ürün listesi boş. Yönetici ürünleri ekleyene kadar bildirim yapılamaz.</div>`;
@@ -322,10 +323,13 @@ async function submitFault(f) {
 
 async function submitShort(f) {
   const d = Object.fromEntries(new FormData(f));
-  await addDoc(collection(db, "shortages"), {
+  const file = f.elements.photo.files[0];
+  const obj = {
     urun: d.urun, durum: d.durum, konum: d.konum, note: (d.note || "").trim(),
     status: "acik", name: myName(), uid: user.uid, createdAt: iso()
-  });
+  };
+  if (file && file.size) obj.photo = await shrink(file);
+  await addDoc(collection(db, "shortages"), obj);
   flash = "Eksik ürün bildirildi.";
   location.hash = "eksik";
   route();
