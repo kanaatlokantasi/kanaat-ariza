@@ -175,7 +175,8 @@ function faultPage(eqId) {
       <label>Arıza türü<select name="type" id="ftype">${opts(TYPES)}</select></label>
       <label>Öncelik<select name="priority" id="fpri">${opts(PRI, "Orta")}</select></label>
       <label>Açıklama<textarea name="desc" rows="3" placeholder="Ne oldu, nerede?"></textarea></label>
-      <label>Fotoğraf (isteğe bağlı)<input name="photo" type="file" accept="image/*"></label>
+      <label>Fotoğraf (isteğe bağlı)<input name="photo" type="file" accept="image/*" capture="environment"></label>
+        <label>Ya da galeriden seç<input name="galeri" type="file" accept="image/*"></label>
       <button class="btn red big" style="margin-top:14px">Bildir</button><p class="err"></p>
     </form></section>
     <h3>Son arızalar</h3>${list}`;
@@ -189,7 +190,8 @@ function shortPage() {
         <label>Durum<select name="durum">${opts(DURUM)}</select></label>
         <label>Konum<select name="konum">${opts(SHORT_LOC)}</select></label>
         <label>Not<textarea name="note" rows="2" placeholder="Örn. 2 kasa kaldı"></textarea></label>
-        <label>Fotoğraf (isteğe bağlı)<input name="photo" type="file" accept="image/*"></label>
+        <label>Fotoğraf (isteğe bağlı)<input name="photo" type="file" accept="image/*" capture="environment"></label>
+        <label>Ya da galeriden seç<input name="galeri" type="file" accept="image/*"></label>
         <button class="btn dark big" style="margin-top:14px">Bildir</button><p class="err"></p>
       </form>`
     : `<div class="warn">Ürün listesi boş. Yönetici ürünleri ekleyene kadar bildirim yapılamaz.</div>`;
@@ -308,7 +310,7 @@ async function submitAuth(f) {
 
 async function submitFault(f) {
   const d = Object.fromEntries(new FormData(f));
-  const file = f.elements.photo.files[0];
+  const file = f.elements.photo.files[0] || f.elements.galeri?.files[0];
   const eq = D.equipment.find(x => x.id === d.eqId);
   const obj = {
     eqId: d.eqId || null, eqName: eq?.name || "", loc: d.loc, type: d.type, priority: d.priority,
@@ -323,7 +325,7 @@ async function submitFault(f) {
 
 async function submitShort(f) {
   const d = Object.fromEntries(new FormData(f));
-  const file = f.elements.photo.files[0];
+  const file = f.elements.photo.files[0] || f.elements.galeri?.files[0];
   const obj = {
     urun: d.urun, durum: d.durum, konum: d.konum, note: (d.note || "").trim(),
     status: "acik", name: myName(), uid: user.uid, createdAt: iso()
