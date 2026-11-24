@@ -35,7 +35,7 @@ const ERR = {
 
 let user = null, me = null, authMode = "login", flash = "", pushDone = false;
 let unsubMe = null, unsubs = [], dataSig = "";
-const D = { equipment: [], faults: [], shortages: [], products: [], maint: [], users: [] };
+const D = { equipment: [], faults: [], shortages: [], products: [], kats: [], maint: [], users: [] };
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -182,11 +182,26 @@ function faultPage(eqId) {
     <h3>Son arızalar</h3>${list}`;
 }
 
+function catNames() {
+  const known = new Set(D.kats.map(k => k.ad));
+  const cats = D.kats.map(k => k.ad).sort((a, b) => a.localeCompare(b, "tr"));
+  if (D.products.some(p => !known.has(p.kategori))) cats.push("Diğer");
+  return cats;
+}
+
+function prodOptsFor(cat) {
+  const known = new Set(D.kats.map(k => k.ad));
+  const list = D.products.filter(p => cat === "Diğer" ? !known.has(p.kategori) : p.kategori === cat)
+    .sort((a, b) => (a.ad || "").localeCompare(b.ad || "", "tr"));
+  return list.map(p => `<option>${esc(p.ad)}</option>`).join("") || `<option value="">Bu kategoride ürün yok</option>`;
+}
+
 function shortPage() {
-  const prods = D.products.slice().sort((a, b) => (a.ad || "").localeCompare(b.ad || "", "tr"));
-  const form = prods.length
+  const cats = catNames();
+  const form = D.products.length
     ? `<form id="sf">
-        <label>Ürün<select name="urun">${prods.map(p => `<option>${esc(p.ad)}</option>`).join("")}</select></label>
+        <label>Kategori<select id="skat" name="kat">${opts(cats)}</select></label>
+        <label>Ürün<select id="surun" name="urun">${prodOptsFor(cats[0])}</select></label>
         <label>Durum<select name="durum">${opts(DURUM)}</select></label>
         <label>Konum<select name="konum">${opts(SHORT_LOC)}</select></label>
         <label>Not<textarea name="note" rows="2" placeholder="Örn. 2 kasa kaldı"></textarea></label>
@@ -232,6 +247,11 @@ function eqDetail(id) {
     <h3>Arıza kayıtları</h3>${fl.map(faultItem).join("") || empty("Arıza kaydı yok.")}`;
 }
 
+function katOptions(sel) {
+  return D.kats.slice().sort((a, b) => (a.ad || "").localeCompare(b.ad || "", "tr"))
+    .map(k => `<option ${k.ad === sel ? "selected" : ""}>${esc(k.ad)}</option>`).join("");
+}
+
 function adminPage() {
   const users = D.users.slice().sort((a, b) => (a.approved === true ? 1 : 0) - (b.approved === true ? 1 : 0) || (a.name || "").localeCompare(b.name || "", "tr"));
   const userRows = users.map(u => {
@@ -255,9 +275,14 @@ function adminPage() {
         <button class="btn red" data-act="deleq" data-id="${esc(e.id)}">Sil</button>
       </div></div>`).join("") || empty("Henüz ekipman yok.");
 
+  const katRows = D.kats.slice().sort((a, b) => (a.ad || "").localeCompare(b.ad || "", "tr")).map(k => `
+    <div class="item"><b>${esc(k.ad)}</b>
+      <div class="row"><button class="btn red" data-act="delkat" data-id="${esc(k.id)}">Sil</button></div></div>`).join("") || empty("Kategori yok.");
+
   const prodRows = D.products.slice().sort((a, b) => (a.ad || "").localeCompare(b.ad || "", "tr")).map(p => `
     <div class="item"><b>${esc(p.ad)}</b>
-      <div class="row"><button class="btn red" data-act="delprod" data-id="${esc(p.id)}">Sil</button></div></div>`).join("") || empty("Ürün yok.");
+      <div class="row"><select data-pkat="${esc(p.id)}"><option value="">Kategorisiz</option>${katOptions(p.kategori)}</select>
+      <button class="btn red" data-act="delprod" data-id="${esc(p.id)}">Sil</button></div></div>`).join("") || empty("Ürün yok.");
 
   return `<h2>Yönetim</h2>
     <h3>Kullanıcılar</h3>${userRows || empty("Kullanıcı yok.")}
@@ -274,9 +299,16 @@ function adminPage() {
     </form>
     <h3>Ekipmanlar</h3>${eqRows}
     <div id="qrbox"></div>
+    <h3>Kategoriler (eksik ürün bildiriminde üst grup)</h3>
+    <form id="kf" class="card">
+      <label>Yeni kategori<input name="ad" placeholder="Örn. Kuru baklagil" required></label>
+      <button class="btn" style="margin-top:8px">Ekle</button><p class="err"></p>
+    </form>
+    ${katRows}
     <h3>Ürün listesi (eksik ürün bildirimi için)</h3>
     <form id="uf" class="card">
       <label>Yeni ürün<input name="ad" placeholder="Örn. Süt 1L" required></label>
+      <label>Kategori<select name="kat"><option value="">Kategorisiz</option>${katOptions()}</select></label>
       <button class="btn" style="margin-top:8px">Ekle</button><p class="err"></p>
     </form>
     ${prodRows}`;
@@ -326,8 +358,9 @@ async function submitFault(f) {
 async function submitShort(f) {
   const d = Object.fromEntries(new FormData(f));
   const file = f.elements.photo.files[0] || f.elements.galeri?.files[0];
+  if (!d.urun) throw new Error("Bu kategoride ürün yok. Önce yönetim ekranından ürün ekleyin.");
   const obj = {
-    urun: d.urun, durum: d.durum, konum: d.konum, note: (d.note || "").trim(),
+    urun: d.urun, kat: d.kat || "", durum: d.durum, konum: d.konum, note: (d.note || "").trim(),
     status: "acik", name: myName(), uid: user.uid, createdAt: iso()
   };
   if (file && file.size) obj.photo = await shrink(file);
@@ -359,14 +392,21 @@ async function submitEquip(f) {
   route();
 }
 
+async function submitCat(f) {
+  const d = Object.fromEntries(new FormData(f));
+  await addDoc(collection(db, "kategoriler"), { ad: d.ad.trim(), createdAt: iso() });
+  flash = "Kategori eklendi.";
+  route();
+}
+
 async function submitProduct(f) {
   const d = Object.fromEntries(new FormData(f));
-  await addDoc(collection(db, "products"), { ad: d.ad.trim(), createdAt: iso() });
+  await addDoc(collection(db, "products"), { ad: d.ad.trim(), kategori: d.kat || "", createdAt: iso() });
   flash = "Ürün eklendi.";
   route();
 }
 
-const FORMS = { af: submitAuth, ff: submitFault, sf: submitShort, mf: submitMaint, ef: submitEquip, uf: submitProduct };
+const FORMS = { af: submitAuth, ff: submitFault, sf: submitShort, mf: submitMaint, ef: submitEquip, uf: submitProduct, kf: submitCat };
 
 document.addEventListener("submit", ev => {
   ev.preventDefault();
@@ -386,6 +426,8 @@ document.addEventListener("change", async ev => {
   const t = ev.target;
   try {
     if (t.id === "ftype" && ACIL.includes(t.value)) $("#fpri").value = "Acil";
+    if (t.id === "skat") $("#surun").innerHTML = prodOptsFor(t.value);
+    if (t.dataset.pkat) await updateDoc(doc(db, "products", t.dataset.pkat), { kategori: t.value });
     if (t.dataset.fst) await updateDoc(doc(db, "faults", t.dataset.fst), { status: t.value });
     if (t.dataset.sst) await updateDoc(doc(db, "shortages", t.dataset.sst), { status: t.value });
     if (t.dataset.role) await updateDoc(doc(db, "users", t.dataset.role), { role: t.value });
@@ -404,6 +446,7 @@ document.addEventListener("click", async ev => {
     if (act === "approve") await updateDoc(doc(db, "users", id), { approved: true, decidedAt: iso() });
     if (act === "revoke" && confirm("Bu kişinin erişimi kapatılsın mı?")) await updateDoc(doc(db, "users", id), { approved: false, decidedAt: iso() });
     if (act === "delprod" && confirm("Ürün listeden silinsin mi?")) await deleteDoc(doc(db, "products", id));
+    if (act === "delkat" && confirm("Kategori silinsin mi? Altındaki ürünler 'Diğer' grubuna geçer.")) await deleteDoc(doc(db, "kategoriler", id));
     if (act === "deleq" && confirm("Ekipman silinsin mi?")) await deleteDoc(doc(db, "equipment", id));
     if (act === "prio") await updateDoc(doc(db, "equipment", id), { priority: b.dataset.v !== "1" });
   } catch (e) { flash = errMsg(e); route(); }
@@ -439,6 +482,7 @@ function syncData() {
   sub("faults", "faults");
   sub("shortages", "shortages");
   sub("products", "products");
+  sub("kategoriler", "kats");
   sub("maintenance", "maint");
   if (sig === "admin") sub("users", "users");
 }
@@ -460,7 +504,7 @@ onAuthStateChanged(auth, u => {
   user = u;
   if (unsubMe) { unsubMe(); unsubMe = null; }
   unsubs.forEach(f => f()); unsubs = []; dataSig = ""; me = null;
-  D.equipment = []; D.faults = []; D.shortages = []; D.products = []; D.maint = []; D.users = [];
+  D.equipment = []; D.faults = []; D.shortages = []; D.products = []; D.kats = []; D.maint = []; D.users = [];
   if (u) startMe(u);
   route();
 });
