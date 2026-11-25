@@ -1,7 +1,8 @@
 import { firebaseConfig, VAPID_KEY } from "./config.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
 import {
-  getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, updateProfile
+  getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, updateProfile,
+  setPersistence, browserLocalPersistence
 } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
 import {
   getFirestore, doc, collection, setDoc, addDoc, updateDoc, deleteDoc, arrayUnion, onSnapshot
@@ -10,6 +11,7 @@ import { getMessaging, getToken, isSupported } from "https://www.gstatic.com/fir
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
+setPersistence(auth, browserLocalPersistence).catch(() => {});
 const db = getFirestore(app);
 
 const LOC = ["Mutfak","Salon","Müşteri Bay Tuvaleti","Müşteri Bayan Tuvaleti","Personel Soyunma Odası","Büyük Depo","Üst Kat Depo","Soğuk hava deposu","Dış alan","Diğer"];
