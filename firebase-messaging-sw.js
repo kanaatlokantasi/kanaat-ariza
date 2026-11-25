@@ -16,7 +16,7 @@ const messaging = firebase.messaging();
 // Sunucu yalnızca data gönderir, bildirimi burada gösteriyoruz.
 messaging.onBackgroundMessage(payload => {
   const d = payload.data || {};
-  self.registration.showNotification(d.title || "Kanaat Bakım", {
+  self.registration.showNotification(d.title || "Arıza-Eksik Ürün", {
     body: d.body || "",
     tag: d.title || "kanaat",
     renotify: true,

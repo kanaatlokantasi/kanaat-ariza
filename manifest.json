@@ -1,6 +1,6 @@
 {
-  "name": "Kanaat Bakım ve Arıza",
-  "short_name": "Kanaat Bakım",
+  "name": "Arıza ve Eksik Ürün",
+  "short_name": "Arıza-Eksik",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
