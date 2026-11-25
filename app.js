@@ -159,8 +159,10 @@ function home() {
   const open = D.faults.filter(f => f.status !== "kapandi").sort(byNew);
   const sh = D.shortages.filter(s => s.status !== "kapandi").sort(byNew);
   return `${pushBanner()}
-    <a class="btn red big" href="#ariza">Arıza bildir</a>
-    <a class="btn dark big" href="#eksik">Eksik ürün bildir</a>
+    <div class="tiles">
+      <a class="tile red" href="#ariza">Arıza bildir</a>
+      <a class="tile amber" href="#eksik">Eksik ürün bildir</a>
+    </div>
     <h3>Açık arızalar (${open.length})</h3>${open.slice(0, 15).map(faultItem).join("") || empty("Açık arıza yok.")}
     <h3>Açık eksik ürünler (${sh.length})</h3>${sh.slice(0, 15).map(shortItem).join("") || empty("Açık eksik ürün yok.")}`;
 }
